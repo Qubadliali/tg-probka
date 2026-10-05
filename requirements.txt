@@ -1,0 +1,8 @@
+aiogram
+aiosqlite
+pydantic
+pydantic-settings
+cryptography
+tzdata
+libsql-client
+aiohttp
