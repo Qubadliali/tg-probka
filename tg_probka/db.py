@@ -2,6 +2,8 @@
 """
 Работа с Turso (libsql) вместо локального SQLite.
 Синтаксис SQL — тот же. Меняется только способ подключения.
+Использует HTTP-транспорт (https://), а не WebSocket (wss://),
+потому что Render блокирует WebSocket-соединения к Turso.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ _client: libsql_client.Client | None = None
 
 
 def get_client() -> libsql_client.Client:
-    """Ленивая инициализация клиента Turso."""
+    """Ленивая инициализация клиента Turso через HTTP."""
     global _client
     if _client is None:
         url = os.environ.get("TURSO_URL", "").strip()
@@ -34,8 +36,10 @@ def get_client() -> libsql_client.Client:
             raise RuntimeError(
                 "TURSO_URL и TURSO_TOKEN должны быть заданы в .env"
             )
-        _client = libsql_client.create_client_sync(url=url, auth_token=token)
-        log.info("Turso client создан для %s", url)
+        # Принудительно HTTP, чтобы избежать WebSocket-проблем на Render
+        http_url = url.replace("libsql://", "https://").replace("wss://", "https://")
+        _client = libsql_client.create_client_sync(url=http_url, auth_token=token)
+        log.info("Turso client создан для %s", http_url)
     return _client
 
 
@@ -60,8 +64,6 @@ class _AsyncConnWrapper:
             self._client.execute(sql, params)
 
     async def executescript(self, script: str):
-        # Turso/libsql не поддерживает executescript напрямую.
-        # Разбиваем по ';' и выполняем по одной.
         for stmt in script.split(";"):
             stmt = stmt.strip()
             if stmt:
@@ -80,9 +82,6 @@ class _AsyncConnWrapper:
 
 @asynccontextmanager
 async def write_tx():
-    """В Turso/libsql явные транзакции через sync-клиент ограничены.
-    Для нашего бота достаточно выполнять запросы последовательно — SQLite в облаке сам атомарен
-    для одиночных операторов."""
     client = get_client()
     yield _AsyncConnWrapper(client)
 
@@ -152,7 +151,6 @@ async def migrate() -> None:
         try:
             client.execute(script)
         except Exception as e:
-            # Если таблица уже есть — пропускаем
             log.debug("Migration %s skipped: %s", idx, e)
     log.info("Turso migrations applied")
 
@@ -184,8 +182,6 @@ async def seed_defaults(defaults: dict[str, str]) -> None:
 
 # ======================= users =======================
 def _row_to_user(row) -> User:
-    """Преобразование строки Turso в объект User."""
-    # libsql возвращает Row — индексируется как список
     data = dict(zip(
         ["user_id", "username", "lang", "last_drop_date", "referrer_id",
          "refs_count", "bonus_accounts", "ref_rewarded", "is_banned",
@@ -245,7 +241,6 @@ async def upsert_user_on_start(
         )
         return await get_user(user_id)
 
-    # Обновляем username и role, если надо
     existing = _row_to_user(row)
     updates, params = [], []
     if existing.username != username:
@@ -355,7 +350,6 @@ async def add_accounts(lines: list[str], added_by: int) -> tuple[int, int]:
 async def issue_account_row(user_id: int, today: str, daily_limit: int) -> str:
     client = get_client()
 
-    # Проверка лимита
     result = client.execute(
         "SELECT last_drop_date, bonus_accounts, accounts_taken "
         "FROM users WHERE user_id = ?",
@@ -370,7 +364,6 @@ async def issue_account_row(user_id: int, today: str, daily_limit: int) -> str:
     if last_date == today and taken_today >= daily_limit and bonus <= 0:
         raise DailyLimitReached()
 
-    # Свободный аккаунт
     result = client.execute(
         "SELECT id FROM accounts WHERE is_used = 0 ORDER BY id LIMIT 1"
     )
@@ -379,7 +372,6 @@ async def issue_account_row(user_id: int, today: str, daily_limit: int) -> str:
     acc_id = result.rows[0][0]
 
     ts = datetime.now(timezone.utc).isoformat()
-    # Атомарная выдача — только если он ещё свободен
     result = client.execute(
         "UPDATE accounts SET is_used = 1, used_by = ?, used_at = ? "
         "WHERE id = ? AND is_used = 0 RETURNING account_data",
@@ -389,7 +381,6 @@ async def issue_account_row(user_id: int, today: str, daily_limit: int) -> str:
         raise NoAccounts()
     data = result.rows[0][0]
 
-    # Списываем лимит или бонус
     if last_date == today and taken_today >= daily_limit and bonus > 0:
         client.execute(
             "UPDATE users SET bonus_accounts = bonus_accounts - 1, "
