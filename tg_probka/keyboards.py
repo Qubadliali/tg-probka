@@ -28,7 +28,6 @@ def main_kb(lang: str, role: Role) -> ReplyKeyboardMarkup:
         [KeyboardButton(text=t(lang, "btn_get")), KeyboardButton(text=t(lang, "btn_stock"))],
         [KeyboardButton(text=t(lang, "btn_ref")), KeyboardButton(text=t(lang, "btn_top"))],
         [KeyboardButton(text=t(lang, "btn_profile")), KeyboardButton(text=t(lang, "btn_team"))],
-        [KeyboardButton(text=t(lang, "btn_coop")), KeyboardButton(text=t(lang, "btn_support"))],
     ]
     if at_least(role, Role.VIP):
         rows.append([KeyboardButton(text=t(lang, "btn_admin"))])
@@ -73,8 +72,6 @@ def admin_panel_kb(role: Role) -> InlineKeyboardMarkup:
 
     if role is Role.OWNER:
         rows.append([InlineKeyboardButton(text="📢 Каналы", callback_data="admin_set_channels")])
-        rows.append([InlineKeyboardButton(text="💝 Текст поддержки", callback_data="admin_set_support")])
-        rows.append([InlineKeyboardButton(text="🤝 Текст сотрудничества", callback_data="admin_set_coop")])
         rows.append([InlineKeyboardButton(text="🎯 Дневной лимит", callback_data="admin_set_limit")])
 
     rows.append([InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")])

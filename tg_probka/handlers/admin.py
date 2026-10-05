@@ -30,8 +30,6 @@ S_BAN = "s_ban"
 S_UNBAN = "s_unban"
 S_BROADCAST = "s_broadcast"
 S_CHANNELS = "s_channels"
-S_SUPPORT = "s_support"
-S_COOP = "s_coop"
 S_LIMIT = "s_limit"
 S_LOOKUP = "s_lookup"
 
@@ -438,48 +436,6 @@ async def save_ch(message: Message, state: FSMContext, user, role: Role):
     await db.audit_log(user.user_id, "channels_set", payload={"count": len(lines)})
     await state.clear()
     await message.answer(f"✅ {len(lines)} каналов.")
-
-
-@router.callback_query(F.data == "admin_set_support")
-async def set_sup(cb: CallbackQuery, role: Role, state: FSMContext):
-    if not _owner(role):
-        await cb.answer("🚫", show_alert=True)
-        return
-    await cb.message.edit_text("💝 Новый текст поддержки:")
-    await state.set_state(S_SUPPORT)
-    await cb.answer()
-
-
-@router.message(StateFilter(S_SUPPORT))
-async def save_sup(message: Message, state: FSMContext, user, role: Role):
-    if not _owner(role):
-        await state.clear()
-        return
-    await db.set_setting("support_text", message.html_text or message.text or "")
-    await db.audit_log(user.user_id, "support_text_set")
-    await state.clear()
-    await message.answer("✅")
-
-
-@router.callback_query(F.data == "admin_set_coop")
-async def set_coop(cb: CallbackQuery, role: Role, state: FSMContext):
-    if not _owner(role):
-        await cb.answer("🚫", show_alert=True)
-        return
-    await cb.message.edit_text("🤝 Новый текст сотрудничества:")
-    await state.set_state(S_COOP)
-    await cb.answer()
-
-
-@router.message(StateFilter(S_COOP))
-async def save_coop(message: Message, state: FSMContext, user, role: Role):
-    if not _owner(role):
-        await state.clear()
-        return
-    await db.set_setting("coop_text", message.html_text or message.text or "")
-    await db.audit_log(user.user_id, "coop_text_set")
-    await state.clear()
-    await message.answer("✅")
 
 
 @router.callback_query(F.data == "admin_set_limit")

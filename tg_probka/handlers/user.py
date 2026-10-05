@@ -108,16 +108,6 @@ async def menu_team(message: Message, user):
     await message.answer("\n".join(lines))
 
 
-@router.message(F.text.in_(btn_filter("btn_coop")))
-async def menu_coop(message: Message):
-    await message.answer(await db.get_setting("coop_text", ""))
-
-
-@router.message(F.text.in_(btn_filter("btn_support")))
-async def menu_support(message: Message):
-    await message.answer(await db.get_setting("support_text", ""))
-
-
 @router.callback_query(F.data == "check_sub")
 async def check_sub_cb(cb: CallbackQuery, bot: Bot, lang: str):
     res = await services.check_subscriptions(bot, cb.from_user.id)
